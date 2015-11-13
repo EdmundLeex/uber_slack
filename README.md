@@ -34,7 +34,7 @@ This can handle a variety of address formats:
 /uber ride 1061 market street san francisco to 24 willie mays plaza san francisco
 ```
 
-Uber will look for an available UberX near your origin address.  Once a driver is on their way, you'll receive a confirmation.  If surge pricing is in effect, the surge multiplier will be shown first, and you can `/uber accept` to get your ride.
+Uber will look for an available UberX near your origin address.  You may check up on the status of this request with an `/uber status` command. Once a driver is on their way, you'll receive a confirmation.  If surge pricing is in effect, the surge multiplier will be shown first, and you can `/uber accept` to get your ride. Cancelling rides is as easy as typing `/uber cancel` into your Slack client. Sharing ride details is as easy as using an `/uber share` command and sharing the resulting hyperlink from the Slack bot.
 
 #### Uber Vehicles
 To see a list of Uber products available for your address:
@@ -56,5 +56,5 @@ A help manual is available with the 'help' command:
 
 #### To-Dos / Forthcoming Features
 - [ ] Echo command and resolved geographic information back
-- [ ] Canceling ride requests from Slack using `/uber cancel`
+- [X] Canceling ride requests from Slack using `/uber cancel`
 - [ ] Specifying which Uber service to hail in the format `/uber ride [service] [pickup address] [destination]`

@@ -2,7 +2,7 @@ require 'addressable/uri'
 
 BASE_URL = ENV["uber_base_url"]
 
-VALID_COMMANDS = ['ride', 'products', 'get_eta', 'help', 'accept' ]
+VALID_COMMANDS = %w(ride products get_eta help accept)
 
 # returned when ride isn't requested in the format '{origin} to {destination}'
 RIDE_REQUEST_FORMAT_ERROR = <<-STRING
@@ -31,17 +31,14 @@ STRING
 LOCATION_NOT_FOUND_ERROR = "Please enter a valid address. Be as specific as possible (e.g. include city)."
 
 class UberCommand
-
-  def initialize bearer_token, user_id, response_url
+  def initialize(bearer_token, user_id, response_url)
     @bearer_token = bearer_token
     @user_id = user_id
     @response_url = response_url
   end
 
-  def run user_input_string
-    if user_input_string.blank?
-      return UNKNOWN_COMMAND_ERROR
-    end
+  def run(user_input_string)
+    return UNKNOWN_COMMAND_ERROR if user_input_string.blank?
     input = user_input_string.split(" ", 2) # Only split on first space.
     command_name = input.first.downcase
 
@@ -50,18 +47,18 @@ class UberCommand
 
     return UNKNOWN_COMMAND_ERROR if invalid_command?(command_name) || command_name.nil?
 
-    response = self.send(command_name, command_argument)
+    response = send(command_name, command_argument)
     # Send back response if command is not valid
-    return response
+    response
   end
 
-
   private
+
   attr_reader :bearer_token
-  # don't need to give default = nil for inputs, since we always send something
-  def get_eta address
+
+  def get_eta(address)
     # Handle errors if invalid error is entered
-    return LOCATION_NOT_FOUND_ERROR if ( address.nil? || resolve_address(address) == LOCATION_NOT_FOUND_ERROR)
+    return LOCATION_NOT_FOUND_ERROR if address.nil? || resolve_address(address) == LOCATION_NOT_FOUND_ERROR
     lat, lng = resolve_address(address)
     uri = Addressable::URI.parse("#{BASE_URL}/v1/estimates/time")
     uri.query_values = { 'start_latitude' => lat, 'start_longitude' => lng }
@@ -69,7 +66,7 @@ class UberCommand
     resource = uri.to_s
 
     result = RestClient.get(
-    resource,
+      resource,
       authorization: bearer_header,
       "Content-Type" => :json,
       accept: 'json'
@@ -77,14 +74,14 @@ class UberCommand
     return "Sorry, something went wrong on our part" if result.code == 500
 
     result = JSON.parse(result)
-    min_s, max_s = result['times'].minmax{|el1,el2| el1['estimate'] <=> el2['estimate']}.map{|x| x['estimate']}
+    min_s, max_s = result['times'].minmax { |el1, el2| el1['estimate'] <=> el2['estimate'] }.map { |x| x['estimate'] }
     min_s /= 60
     max_s /= 60
     max_s += 1 if max_s == min_s
     "Your ride will take between #{min_s} to #{max_s} minutes"
   end
 
-  def ride_request_details request_id
+  def ride_request_details(request_id)
     uri = Addressable::URI.parse("#{BASE_URL}/v1/requests/#{request_id}")
     uri.query_values = { 'request_id' => request_id }
     resource = uri.to_s
@@ -99,7 +96,7 @@ class UberCommand
     JSON.parse(result)
   end
 
-  def cancel_ride request_id
+  def cancel_ride(request_id)
     uri = Addressable::URI.parse("#{BASE_URL}/v1/requests/#{request_id}")
     # uri.query_values = { 'request_id' => request_id }
     resource = uri.to_s
@@ -114,11 +111,11 @@ class UberCommand
     "Ride Cancelled" if result
   end
 
-  def help _ # No command argument.
+  def help(_) # No command argument.
     HELP_TEXT
   end
 
-  def ride input_str
+  def ride(input_str)
     return RIDE_REQUEST_FORMAT_ERROR unless input_str.include?(" to ")
 
     origin_name, destination_name = input_str.split("to").map(&:strip)
@@ -178,16 +175,14 @@ class UberCommand
         # "We were not able to request a ride from Uber. Please try again."
         format_response_errors ride_response["errors"]
       else
-        ride.update!(request_id: ride_response['request_id'])  # TODO: Do async. #Not this... RestClient posts could be async.
+        ride.update!(request_id: ride_response['request_id'])
         success_msg = format_200_ride_request_response(ride_response)
       end
-      # ... No, return an empty string if we had a response_url sending success.
-      # ""  # Return empty string in case we answer Slack soon enough for response to go through.
+      # ""
     end
   end
 
-
-  def accept stated_multiplier
+  def accept(stated_multiplier)
     @ride = Ride.where(user_id: @user_id).order(:updated_at).last
 
     if @ride.nil?
@@ -195,15 +190,6 @@ class UberCommand
     end
 
     multiplier = @ride.surge_multiplier
-    # surge_is_high = multiplier >= 2.0
-
-    # if surge_is_high and (stated_multiplier.nil? or stated_multiplier.to_f != multiplier)
-    #   return "That didn't work. Please reply '/uber accept #{multiplier}' to confirm the ride."
-    # end
-    #
-    # if surge_is_high and !stated_multiplier.include?('.')
-    #   return "That didn't work. Please include decimals to confirm #{multiplier}x surge."
-    # end
 
     # I'm unclear why we are explicitly requiring them to type the multiplier only when >= 2.
     # A confusing design decision, and probably confusing for the user.
@@ -246,7 +232,7 @@ class UberCommand
         return fail_msg
       end
 
-      if response.code == 200 or response.code == 202
+      if response.code == 200 || response.code == 202
         success_msg = format_200_ride_request_response(JSON.parse(response.body))
       else
         fail_msg
@@ -254,7 +240,6 @@ class UberCommand
     end
     # ""
   end
-
 
   def request_ride!(start_lat, start_lng, end_lat, end_lng, product_id, surge_confirmation_id = nil)
      body = {
@@ -325,13 +310,10 @@ class UberCommand
     )
 
     JSON.parse(response.body)
-  end
+ end
 
-
-  def products address
-    if address.blank?
-      return PRODUCTS_REQUEST_FORMAT_ERROR
-    end
+  def products(address = nil)
+    return PRODUCTS_REQUEST_FORMAT_ERROR if address.blank?
 
     resolved_add = resolve_address(address)
 
@@ -343,13 +325,13 @@ class UberCommand
     end
   end
 
-  def get_products_for_lat_lng lat, lng
+  def get_products_for_lat_lng(lat, lng)
     uri = Addressable::URI.parse("#{BASE_URL}/v1/products")
     uri.query_values = { 'latitude' => lat, 'longitude' => lng }
     resource = uri.to_s
 
     result = RestClient.get(
-    resource,
+      resource,
       authorization: bearer_header,
       "Content-Type" => :json,
       accept: 'json'
@@ -358,7 +340,7 @@ class UberCommand
     JSON.parse(result.body)
   end
 
-  def format_200_ride_request_response response
+  def format_200_ride_request_response(response)
     eta = response['eta'].to_i / 60
 
     estimate_msg = "very soon" if eta == 0
@@ -368,14 +350,14 @@ class UberCommand
     "Thanks! A driver will be on their way soon. We expect them to arrive #{estimate_msg}."
   end
 
-  def format_response_errors response_errors
+  def format_response_errors(response_errors)
     response = "The following errors occurred: \n"
     response_errors.each do |error|
       response += "- *#{error['title']}* \n"
     end
   end
 
-  def format_products_response products_response
+  def format_products_response(products_response)
     unless products_response['products'] && !products_response['products'].empty?
       return "No Uber products available for that location."
     end
@@ -390,11 +372,11 @@ class UberCommand
     "Bearer #{bearer_token}"
   end
 
-  def invalid_command? name
+  def invalid_command?(name)
     !VALID_COMMANDS.include? name
   end
 
-  def resolve_address address
+  def resolve_address(address)
     location = Geocoder.search(address).first
 
     if location.blank?
